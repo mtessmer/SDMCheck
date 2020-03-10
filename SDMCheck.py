@@ -1,5 +1,7 @@
 from PyQt5 import QtWidgets, QtCore, QtGui
 import pyqtgraph as pg
+import numpy as np
+from scipy.interpolate import interp1d
 import sys, os
 from functools import partial
 from Bio import SeqIO, AlignIO, pairwise2
@@ -10,22 +12,27 @@ format_dict = {'ab1': 'abi',
                'seq': 'fasta'}
 
 channels = ('DATA9', 'DATA10', 'DATA11', 'DATA12')
-
+base_per_window = 83.17
 class MainWindow(QtWidgets.QMainWindow):
 
     def __init__(self, *args, **kwargs):
         super(MainWindow, self).__init__(*args, **kwargs)
 
-        self.setWindowTitle("PySeq")
+        self.setWindowTitle("SDMCheck")
         self.resize(1200, 800)
+        self.pad = 10
 
         self.centralwidget = QtWidgets.QWidget(self)
 
+        self.list_width =500
+        self.list_height = 200
         self.listWidget = FileList(self.centralwidget)
-        self.listWidget.setGeometry(QtCore.QRect(10, 10, 500, 190))
+        self.listWidget.setGeometry(QtCore.QRect(self.pad, self.pad, self.list_width, self.list_height))
 
+        self.button_width = 90
         self.list_button_widget = QtWidgets.QWidget(self.centralwidget)
-        self.list_button_widget.setGeometry(QtCore.QRect(510, 10, 90, 190))
+        self.list_button_widget.setGeometry(QtCore.QRect(self.list_width + 2 * self.pad, self.pad,
+                                                         self.button_width, self.list_height))
 
         self.verticalLayout = QtWidgets.QVBoxLayout(self.list_button_widget)
         self.verticalLayout.setContentsMargins(0, 0, 0, 0)
@@ -49,27 +56,46 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.init_menu()
 
+
+        self.text_width = 1000
+        self.text_height = 200
+        self.graphWidget = pg.PlotWidget(self.centralwidget)
+        self.graphWidget.setGeometry(QtCore.QRect(self.pad, 2 * self.pad + self.list_height,
+                                                  self.text_width + 35, self.text_height - 30))
+        self.graphWidget.setBackground('w')
+        self.graphWidget.setRange(xRange=[0, base_per_window], padding=0)
+        self.graphWidget.setMouseEnabled(x=False)
+
         self.text = QtWidgets.QPlainTextEdit(self.centralwidget)
-        self.text.setGeometry(QtCore.QRect(10, 210, 1000, 200))
+        self.text.setGeometry(QtCore.QRect(self.pad + 35, 2 * self.pad + self.list_height,
+                                           self.text_width, self.text_height))
         self.text.setFont(QtGui.QFont("Courier", 15))
+        self.text.viewport().setAutoFillBackground(False)
         self.text.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
         self.highlight = SnpHighlighter(self.text.document())
 
+        self.scroll = self.text.horizontalScrollBar()
+        self.scroll.valueChanged.connect(self.scroll_update)
+
         self.text_button_widget = QtWidgets.QWidget(self.centralwidget)
-        self.text_button_widget.setGeometry(QtCore.QRect(1010, 202, 90, 200))
+        self.text_button_widget.setGeometry(QtCore.QRect(self.pad * 2  + 25 + self.text_width,
+                                                         self.pad * 2 + self.list_height + 15,
+                                                         self.button_width, self.text_height))
+
         self.verticalLayout2 = QtWidgets.QVBoxLayout(self.text_button_widget)
         self.verticalLayout2.setAlignment(QtCore.Qt.AlignTop)
         self.verticalLayout2.setSpacing(0)
 
-        self.graphWidget = pg.PlotWidget(self.centralwidget)
-        self.graphWidget.setGeometry(QtCore.QRect(10, 420, 1000, 200))
-        self.graphWidget.setBackground('w')
-        self.graphWidget.setRange(xRange=[300, 800])
-        self.graphWidget.setMouseEnabled(y=False)
-
         self.fileListWidget = FileList()
 
         self.setCentralWidget(self.centralwidget)
+
+    def scroll_update(self):
+        r = self.scroll.value()
+        step_size = self.scroll.pageStep()
+        l1 = r * base_per_window / step_size
+        l2 = l1 + base_per_window
+        self.graphWidget.setRange(xRange=[l1, l2], padding=0)
 
     def init_menu(self):
         menu_bar = self.menuBar()
@@ -97,16 +123,31 @@ class MainWindow(QtWidgets.QMainWindow):
         for i, elem in enumerate(self.alignment[1:]):
             self.text.insertPlainText(str(elem.seq) + '\n')
             self.button_list.append(QtWidgets.QPushButton("View Trace"))
-            self.button_list[i].clicked.connect(partial(self.show_trace, seq_id=self.listWidget.item(i+1).text()))
+            self.button_list[i].clicked.connect(partial(self.show_trace, seq_id=self.listWidget.item(i+1).text(),
+                                                        seq_idx=i + 1))
+
             self.verticalLayout2.addWidget(self.button_list[i])
 
-    def show_trace(self, seq_id):
+    def show_trace(self, seq_id, seq_idx):
         self.graphWidget.clear()
         self.graphWidget.addLegend()
         seq_obj = self.seq_objs[seq_id]
 
+        xticks = seq_obj.annotations['abif_raw']['PLOC2']
+        xtick_labels = list(self.alignment[seq_idx])
+        trace_idx = [0] + list(xticks) + [len(seq_obj.annotations['abif_raw'][channels[0]])]
+        aln_idx = [0] + [i + 1 for i, ltr in enumerate(self.alignment[seq_idx]) if ltr != '-']
+        aln_idx += [aln_idx[-1] + 1]
+
+        f = interp1d(trace_idx, aln_idx)
+        new_x = f(np.arange(len(seq_obj.annotations['abif_raw'][channels[0]])))
+
         for i, channel in enumerate(channels):
-            self.graphWidget.plot(seq_obj.annotations['abif_raw'][channel], pen=(i, 4), name="GATC"[i])
+            self.graphWidget.plot(new_x, seq_obj.annotations['abif_raw'][channel], name="GATC"[i], pen=(i,4))
+
+        ax =self.graphWidget.getAxis('bottom')
+        ax.setTicks([list(zip(np.arange(len(xtick_labels)) + 1, xtick_labels))])
+        print("world")
 
     def quit_app(self):
         QtWidgets.qApp.quit()
@@ -190,7 +231,8 @@ class FileList(QtWidgets.QListWidget):
                 tmp = seq_objs[test_seq].annotations['abif_raw']
                 tmp[channels[0]], tmp[channels[1]], tmp[channels[2]], tmp[channels[3]] = \
                     tmp[channels[3]][::-1], tmp[channels[2]][::-1], tmp[channels[1]][::-1], tmp[channels[0]][::-1]
-
+                x = np.arange(len(tmp[channels[0]]))[::-1]
+                tmp['PLOC2'] = [x[i] for i in tmp['PLOC2'][::-1]]
                 # Reverse compliment sequence
                 seq_objs[test_seq] = seq_objs[test_seq].reverse_complement(id=seq_objs[test_seq].id + '_rc')
                 seq_objs[test_seq].annotations['abif_raw'] = tmp.copy()
