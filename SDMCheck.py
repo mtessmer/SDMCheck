@@ -12,7 +12,21 @@ format_dict = {'ab1': 'abi',
                'seq': 'fasta'}
 
 channels = ('DATA9', 'DATA10', 'DATA11', 'DATA12')
-base_per_window = 83.17
+
+
+# TODO: Comments
+#       Docstrings
+#       Fix Window size
+#       Center Widgets
+#       Add Save funciton
+#       Add labels
+#       Hide Trace
+#       Highlight sequence of active trace & Gray out selected trace
+#       Number Amino Acids
+#       Shifter to adjust Amino Acid nunber
+#       Codon Table With Ecoli freq
+#       Live update trace alignment to edited sequence
+
 class MainWindow(QtWidgets.QMainWindow):
 
     def __init__(self, *args, **kwargs):
@@ -50,36 +64,50 @@ class MainWindow(QtWidgets.QMainWindow):
         self.verticalLayout.addWidget(self.markRef)
         self.markRef.clicked.connect(self.listWidget.mark_ref)
 
+        self.moveUp = QtWidgets.QPushButton("Move Up", self.list_button_widget)
+        self.verticalLayout.addWidget(self.moveUp)
+        self.moveUp.clicked.connect(self.listWidget.move_up)
+
+        self.moveDown = QtWidgets.QPushButton("Move Down", self.list_button_widget)
+        self.verticalLayout.addWidget(self.moveDown)
+        self.moveDown.clicked.connect(self.listWidget.move_down)
+
         self.align = QtWidgets.QPushButton("Align", self.list_button_widget)
         self.verticalLayout.addWidget(self.align)
         self.align.clicked.connect(self.run_alignment)
 
         self.init_menu()
 
-
         self.text_width = 1000
-        self.text_height = 200
+        self.text_height = 300
+        self.graph_text_diff = 36
         self.graphWidget = pg.PlotWidget(self.centralwidget)
         self.graphWidget.setGeometry(QtCore.QRect(self.pad, 2 * self.pad + self.list_height,
-                                                  self.text_width + 35, self.text_height - 30))
+                                                  self.text_width + self.graph_text_diff,
+                                                  self.text_height - 30))
         self.graphWidget.setBackground('w')
-        self.graphWidget.setRange(xRange=[0, base_per_window], padding=0)
-        self.graphWidget.setMouseEnabled(x=False)
+
 
         self.text = QtWidgets.QPlainTextEdit(self.centralwidget)
-        self.text.setGeometry(QtCore.QRect(self.pad + 35, 2 * self.pad + self.list_height,
+        self.text.setGeometry(QtCore.QRect(self.pad + self.graph_text_diff, 2 * self.pad + self.list_height,
                                            self.text_width, self.text_height))
         self.text.setFont(QtGui.QFont("Courier", 15))
+        self.base_per_window = (self.text_width) / QtGui.QFontMetrics(QtGui.QFont("Courier", 15)).averageCharWidth()
+
         self.text.viewport().setAutoFillBackground(False)
+        self.text.setFrameStyle(QtWidgets.QFrame.NoFrame)
         self.text.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
         self.highlight = SnpHighlighter(self.text.document())
+
+        self.graphWidget.setRange(xRange=[0, self.base_per_window], padding=0)
+        self.graphWidget.setMouseEnabled(x=False)
 
         self.scroll = self.text.horizontalScrollBar()
         self.scroll.valueChanged.connect(self.scroll_update)
 
         self.text_button_widget = QtWidgets.QWidget(self.centralwidget)
-        self.text_button_widget.setGeometry(QtCore.QRect(self.pad * 2  + 25 + self.text_width,
-                                                         self.pad * 2 + self.list_height + 15,
+        self.text_button_widget.setGeometry(QtCore.QRect(self.pad * 2 + 25 + self.text_width,
+                                                         self.pad * 2 + self.list_height + 35,
                                                          self.button_width, self.text_height))
 
         self.verticalLayout2 = QtWidgets.QVBoxLayout(self.text_button_widget)
@@ -93,8 +121,8 @@ class MainWindow(QtWidgets.QMainWindow):
     def scroll_update(self):
         r = self.scroll.value()
         step_size = self.scroll.pageStep()
-        l1 = r * base_per_window / step_size
-        l2 = l1 + base_per_window
+        l1 = r * self.base_per_window / step_size
+        l2 = l1 + self.base_per_window
         self.graphWidget.setRange(xRange=[l1, l2], padding=0)
 
     def init_menu(self):
@@ -119,6 +147,24 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def show_alignment(self):
         self.button_list = []
+        self.ref_translation = list(self.seq_objs.values())[0].translate()
+        self.ref_translate_aln = ""
+        PROT_counter = 0
+        DNA_counter = 0
+        for ltr in self.alignment[0]:
+            if ltr != '-' and PROT_counter < len(self.ref_translation):
+                if (DNA_counter % 3) == 0:
+                    self.ref_translate_aln += self.ref_translation[PROT_counter]
+                    PROT_counter += 1
+                    DNA_counter += 1
+
+                else:
+                    self.ref_translate_aln += " "
+                    DNA_counter += 1
+            else:
+                self.ref_translate_aln += " "
+
+        self.text.insertPlainText(self.ref_translate_aln + '\n')
         self.text.insertPlainText(str(self.alignment[0].seq) + '\n')
         for i, elem in enumerate(self.alignment[1:]):
             self.text.insertPlainText(str(elem.seq) + '\n')
@@ -136,8 +182,9 @@ class MainWindow(QtWidgets.QMainWindow):
         xticks = seq_obj.annotations['abif_raw']['PLOC2']
         xtick_labels = list(self.alignment[seq_idx])
         trace_idx = [0] + list(xticks) + [len(seq_obj.annotations['abif_raw'][channels[0]])]
-        aln_idx = [0] + [i + 1 for i, ltr in enumerate(self.alignment[seq_idx]) if ltr != '-']
-        aln_idx += [aln_idx[-1] + 1]
+        aln_idx = [i + 0.9 for i, ltr in enumerate(self.alignment[seq_idx]) if ltr != '-']
+        aln_idx = [aln_idx[0] - 1] + aln_idx + [aln_idx[-1] + 1]
+        print(trace_idx[-2], aln_idx[-2], len(seq_obj.seq))
 
         f = interp1d(trace_idx, aln_idx)
         new_x = f(np.arange(len(seq_obj.annotations['abif_raw'][channels[0]])))
@@ -146,7 +193,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.graphWidget.plot(new_x, seq_obj.annotations['abif_raw'][channel], name="GATC"[i], pen=(i,4))
 
         ax =self.graphWidget.getAxis('bottom')
-        ax.setTicks([list(zip(np.arange(len(xtick_labels)) + 1, xtick_labels))])
+        ax.setTicks([list(zip(np.arange(len(xtick_labels)) + 0.9, xtick_labels))])
         print("world")
 
     def quit_app(self):
@@ -194,6 +241,23 @@ class FileList(QtWidgets.QListWidget):
     def remove(self):
         for item in self.selectedItems():
             self.takeItem(self.row(item))
+
+    def move_up(self):
+        currentRow = self.currentRow()
+        if (self.ref) and currentRow == 1:
+            return None
+        currentItem = self.takeItem(currentRow)
+        self.insertItem(currentRow - 1, currentItem)
+        self.setCurrentRow(currentRow - 1)
+
+    def move_down(self):
+        currentRow = self.currentRow()
+        if currentRow == self.count() - 1:
+            return None
+        currentItem = self.takeItem(currentRow)
+        self.insertItem(currentRow + 1, currentItem)
+        self.setCurrentRow(currentRow + 1)
+
 
     def mark_ref(self):
 
@@ -282,7 +346,11 @@ class SnpHighlighter(QtGui.QSyntaxHighlighter):
         self.document = document
 
     def highlightBlock(self, text):
-        ref = self.document.toPlainText().split('/n')[0]
+
+        if len(text) > 0 and text[0] == " ":
+            return None
+
+        ref = self.document.toPlainText().split('\n')[1]
         if len(ref) < len(text):
             diff = len(text) - len(ref)
             ref += diff * '-'
@@ -291,10 +359,6 @@ class SnpHighlighter(QtGui.QSyntaxHighlighter):
 
         for i in idx:
             self.setFormat(i, 1, QtCore.Qt.red)
-
-        pass
-
-
 
 def read_file(file_name):
     ext = file_name[-3:]
