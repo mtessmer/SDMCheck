@@ -16,88 +16,100 @@ channels = ('DATA9', 'DATA10', 'DATA11', 'DATA12')
 
 # TODO: Comments
 #       Docstrings
-#       Fix Window size
-#       Center Widgets
 #       Add Save funciton
-#       Add labels
-#       Hide Trace
-#       Highlight sequence of active trace & Gray out selected trace
 #       Number Amino Acids
 #       Shifter to adjust Amino Acid nunber
-#       Codon Table With Ecoli freq
-#       Live update trace alignment to edited sequence
+#       Codon Table With E. coli codon freq
+
 
 class MainWindow(QtWidgets.QMainWindow):
 
     def __init__(self, *args, **kwargs):
         super(MainWindow, self).__init__(*args, **kwargs)
 
-        self.setWindowTitle("SDMCheck")
-        self.resize(1200, 800)
+        self.label_width = 300
+        self.text_width = 1000
+        self.text_height = 300
+        self.graph_text_diff = 36
+        self.base_per_window = self.text_width / QtGui.QFontMetrics(QtGui.QFont("Courier", 15)).averageCharWidth()
+        self.letter_per_label = int(self.label_width / QtGui.QFontMetrics(QtGui.QFont("Courier", 15)).averageCharWidth())
+        self.char_height = QtGui.QFontMetrics(QtGui.QFont("Courier", 15)).height()
+        self.list_width =500
+        self.list_height = 200
+        self.button_width = 90
+        self.codon_height, self.codon_width = 200, 200
         self.pad = 10
+
+        self.window_width = 4 * self.pad + self.label_width + self.text_width + self.graph_text_diff + self.button_width
+        self.window_height = 4 * self.pad + self.list_height + self.text_height + self.codon_height
+        self.list_start = (self.window_width - (self.list_width + self.button_width + self.pad)) / 2
+
+        self.setWindowTitle("SDMCheck")
+        self.resize(self.window_width, self.window_height)
 
         self.centralwidget = QtWidgets.QWidget(self)
 
-        self.list_width =500
-        self.list_height = 200
         self.listWidget = FileList(self.centralwidget)
-        self.listWidget.setGeometry(QtCore.QRect(self.pad, self.pad, self.list_width, self.list_height))
+        self.listWidget.setGeometry(QtCore.QRect(self.list_start, self.pad, self.list_width, self.list_height))
 
-        self.button_width = 90
         self.list_button_widget = QtWidgets.QWidget(self.centralwidget)
-        self.list_button_widget.setGeometry(QtCore.QRect(self.list_width + 2 * self.pad, self.pad,
-                                                         self.button_width, self.list_height))
+        self.list_button_widget.setGeometry(QtCore.QRect(self.list_width + self.list_width + self.pad,
+                                                         self.pad, self.button_width, self.list_height))
 
-        self.verticalLayout = QtWidgets.QVBoxLayout(self.list_button_widget)
-        self.verticalLayout.setContentsMargins(0, 0, 0, 0)
-        self.verticalLayout.setObjectName("verticalLayout")
+        self.file_button_layout = QtWidgets.QVBoxLayout(self.list_button_widget)
+        self.file_button_layout.setContentsMargins(0, 0, 0, 0)
+        self.file_button_layout.setObjectName("file_button_layout")
 
         self.add_file = QtWidgets.QPushButton("Add File", self.list_button_widget)
-        self.verticalLayout.addWidget(self.add_file)
+        self.file_button_layout.addWidget(self.add_file)
         self.add_file.clicked.connect(self.listWidget.add)
 
         self.remove_file = QtWidgets.QPushButton("Remove File", self.list_button_widget)
-        self.verticalLayout.addWidget(self.remove_file)
+        self.file_button_layout.addWidget(self.remove_file)
         self.remove_file.clicked.connect(self.listWidget.remove)
 
         self.markRef = QtWidgets.QPushButton("Mark Reference", self.list_button_widget)
-        self.verticalLayout.addWidget(self.markRef)
+        self.file_button_layout.addWidget(self.markRef)
         self.markRef.clicked.connect(self.listWidget.mark_ref)
 
         self.moveUp = QtWidgets.QPushButton("Move Up", self.list_button_widget)
-        self.verticalLayout.addWidget(self.moveUp)
+        self.file_button_layout.addWidget(self.moveUp)
         self.moveUp.clicked.connect(self.listWidget.move_up)
 
         self.moveDown = QtWidgets.QPushButton("Move Down", self.list_button_widget)
-        self.verticalLayout.addWidget(self.moveDown)
+        self.file_button_layout.addWidget(self.moveDown)
         self.moveDown.clicked.connect(self.listWidget.move_down)
 
         self.align = QtWidgets.QPushButton("Align", self.list_button_widget)
-        self.verticalLayout.addWidget(self.align)
+        self.file_button_layout.addWidget(self.align)
         self.align.clicked.connect(self.run_alignment)
 
         self.init_menu()
 
-        self.text_width = 1000
-        self.text_height = 300
-        self.graph_text_diff = 36
+        self.seq_label_widget = QtWidgets.QWidget(self.centralwidget)
+        self.seq_label_layout = QtWidgets.QVBoxLayout(self.seq_label_widget)
+        self.seq_label_layout.setAlignment(QtCore.Qt.AlignTop)
+        self.seq_label_layout.setContentsMargins(0,0.5,0,0)
+        self.seq_label_layout.setSpacing(0)
+
+        self.seq_label_widget.setGeometry(QtCore.QRect(self.pad, 2 * self.pad + self.list_height,
+                                                       self.label_width, self.text_height))
+
         self.graphWidget = pg.PlotWidget(self.centralwidget)
-        self.graphWidget.setGeometry(QtCore.QRect(self.pad, 2 * self.pad + self.list_height,
+        self.graphWidget.setBackground('w')
+        self.graphWidget.setGeometry(QtCore.QRect(2 * self.pad + self.label_width, 2 * self.pad + self.list_height,
                                                   self.text_width + self.graph_text_diff,
                                                   self.text_height - 30))
-        self.graphWidget.setBackground('w')
-
 
         self.text = QtWidgets.QPlainTextEdit(self.centralwidget)
-        self.text.setGeometry(QtCore.QRect(self.pad + self.graph_text_diff, 2 * self.pad + self.list_height,
-                                           self.text_width, self.text_height))
         self.text.setFont(QtGui.QFont("Courier", 15))
-        self.base_per_window = (self.text_width) / QtGui.QFontMetrics(QtGui.QFont("Courier", 15)).averageCharWidth()
-
         self.text.viewport().setAutoFillBackground(False)
         self.text.setFrameStyle(QtWidgets.QFrame.NoFrame)
         self.text.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
         self.highlight = SnpHighlighter(self.text.document())
+        self.text.setGeometry(QtCore.QRect(2 * self.pad  + self.label_width + self.graph_text_diff,
+                                           2 * self.pad + self.list_height,
+                                           self.text_width, self.text_height))
 
         self.graphWidget.setRange(xRange=[0, self.base_per_window], padding=0)
         self.graphWidget.setMouseEnabled(x=False)
@@ -106,17 +118,22 @@ class MainWindow(QtWidgets.QMainWindow):
         self.scroll.valueChanged.connect(self.scroll_update)
 
         self.text_button_widget = QtWidgets.QWidget(self.centralwidget)
-        self.text_button_widget.setGeometry(QtCore.QRect(self.pad * 2 + 25 + self.text_width,
-                                                         self.pad * 2 + self.list_height + 35,
+        self.text_button_widget.setGeometry(QtCore.QRect(self.pad * 3 + self.graph_text_diff + self.text_width + self.label_width,
+                                                         self.pad * 2 + self.list_height + 2 * self.char_height,
                                                          self.button_width, self.text_height))
 
-        self.verticalLayout2 = QtWidgets.QVBoxLayout(self.text_button_widget)
-        self.verticalLayout2.setAlignment(QtCore.Qt.AlignTop)
-        self.verticalLayout2.setSpacing(0)
+        self.trace_button_layout = QtWidgets.QVBoxLayout(self.text_button_widget)
+        self.trace_button_layout.setAlignment(QtCore.Qt.AlignTop)
+        self.trace_button_layout.setSpacing(0)
+        self.trace_button_layout.setContentsMargins(0,0,0,0)
+
 
         self.fileListWidget = FileList()
 
         self.setCentralWidget(self.centralwidget)
+
+        self.labels = []
+        self.button_list = []
 
     def scroll_update(self):
         r = self.scroll.value()
@@ -145,6 +162,20 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.show_alignment()
 
+    def add_sequence_label(self, name):
+        start_val = self.letter_per_label
+        pre_text = '...'
+        if len(name) < start_val + 4:
+            start_val = len(name)
+            pre_text = ''
+
+        self.labels.append(pre_text + name[-start_val:-4])
+        Qlab = QtWidgets.QLabel(self.centralwidget)
+        Qlab.setText(self.labels[-1])
+        Qlab.setFont(QtGui.QFont("Courier", 15))
+        Qlab.setAlignment(QtCore.Qt.AlignRight)
+        self.seq_label_layout.addWidget(Qlab)
+
     def show_alignment(self):
         self.button_list = []
         self.ref_translation = list(self.seq_objs.values())[0].translate()
@@ -157,34 +188,43 @@ class MainWindow(QtWidgets.QMainWindow):
                     self.ref_translate_aln += self.ref_translation[PROT_counter]
                     PROT_counter += 1
                     DNA_counter += 1
-
                 else:
                     self.ref_translate_aln += " "
                     DNA_counter += 1
             else:
                 self.ref_translate_aln += " "
 
+        self.add_sequence_label('Ref Amino Acid Seq')
+        self.add_sequence_label('Reference Seq')
         self.text.insertPlainText(self.ref_translate_aln + '\n')
         self.text.insertPlainText(str(self.alignment[0].seq) + '\n')
+
         for i, elem in enumerate(self.alignment[1:]):
+            self.add_sequence_label(self.listWidget.item(i + 1).text())
             self.text.insertPlainText(str(elem.seq) + '\n')
             self.button_list.append(QtWidgets.QPushButton("View Trace"))
             self.button_list[i].clicked.connect(partial(self.show_trace, seq_id=self.listWidget.item(i+1).text(),
                                                         seq_idx=i + 1))
 
-            self.verticalLayout2.addWidget(self.button_list[i])
+            self.trace_button_layout.addWidget(self.button_list[i])
+
+        self.hide_trace_button = QtWidgets.QPushButton("Hide Trace")
+        self.trace_button_layout.addWidget(self.hide_trace_button)
+        self.hide_trace_button.clicked.connect(self.hide_trace)
+
+    def hide_trace(self):
+        self.graphWidget.clear()
 
     def show_trace(self, seq_id, seq_idx):
-        self.graphWidget.clear()
-        self.graphWidget.addLegend()
+        self.hide_trace()
+        doc = self.text.document()
+        # self.graphWidget.addLegend()
         seq_obj = self.seq_objs[seq_id]
-
         xticks = seq_obj.annotations['abif_raw']['PLOC2']
-        xtick_labels = list(self.alignment[seq_idx])
+        xtick_labels = list(doc.findBlockByLineNumber(seq_idx + 1).text())
         trace_idx = [0] + list(xticks) + [len(seq_obj.annotations['abif_raw'][channels[0]])]
-        aln_idx = [i + 0.9 for i, ltr in enumerate(self.alignment[seq_idx]) if ltr != '-']
+        aln_idx = [i + 0.9 for i, ltr in enumerate(doc.findBlockByLineNumber(seq_idx + 1).text()) if ltr != '-']
         aln_idx = [aln_idx[0] - 1] + aln_idx + [aln_idx[-1] + 1]
-        print(trace_idx[-2], aln_idx[-2], len(seq_obj.seq))
 
         f = interp1d(trace_idx, aln_idx)
         new_x = f(np.arange(len(seq_obj.annotations['abif_raw'][channels[0]])))
@@ -192,9 +232,11 @@ class MainWindow(QtWidgets.QMainWindow):
         for i, channel in enumerate(channels):
             self.graphWidget.plot(new_x, seq_obj.annotations['abif_raw'][channel], name="GATC"[i], pen=(i,4))
 
-        ax =self.graphWidget.getAxis('bottom')
+        ax = self.graphWidget.getAxis('bottom')
         ax.setTicks([list(zip(np.arange(len(xtick_labels)) + 0.9, xtick_labels))])
-        print("world")
+
+        self.button_list[seq_idx - 1].setText("Update")
+        self.button_list[seq_idx - 1].setStyleSheet("QPushButton { color: red; }")
 
     def quit_app(self):
         QtWidgets.qApp.quit()
@@ -257,7 +299,6 @@ class FileList(QtWidgets.QListWidget):
         currentItem = self.takeItem(currentRow)
         self.insertItem(currentRow + 1, currentItem)
         self.setCurrentRow(currentRow + 1)
-
 
     def mark_ref(self):
 
@@ -380,6 +421,7 @@ def read_abi(file_name):
     file_format = format_dict[file_name[-3:]]
     records = SeqIO.read(file_name, file_format)
     return records
+
 
 def main():
     app = QtWidgets.QApplication(sys.argv)
