@@ -64,7 +64,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.list_button_widget = QtWidgets.QWidget(self.centralwidget)
         self.file_button_layout = QtWidgets.QVBoxLayout(self.list_button_widget)
         self.file_button_layout.setContentsMargins(0, 0, 0, 0)
-        self.list_button_widget.setGeometry(QtCore.QRect(self.list_width + self.list_width + self.pad,
+        self.list_button_widget.setGeometry(QtCore.QRect(self.list_start + self.list_width + self.pad,
                                                          self.pad, self.button_width, self.list_height))
 
         # Define buttons in list button widget
@@ -113,7 +113,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.graphWidget.setMouseEnabled(x=False)
         self.graphWidget.setGeometry(QtCore.QRect(2 * self.pad + self.label_width, 2 * self.pad + self.list_height,
                                                   self.text_width + self.graph_x_diff,
-                                                  self.text_height))
+                                                  self.text_height + 6))
 
         # Create text widget superimposed on graph widget for sequence alignments
         self.text = QtWidgets.QPlainTextEdit(self.centralwidget)
