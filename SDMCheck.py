@@ -2,13 +2,13 @@ from PyQt5 import QtWidgets, QtCore, QtGui
 import pyqtgraph as pg
 import numpy as np
 from scipy.interpolate import interp1d
-import sys, os
+import sys, os, shutil
 from functools import partial
 from Bio import SeqIO, AlignIO, pairwise2
 from Bio.Align.Applications import ClustalOmegaCommandline
 
 format_dict = {'ab1': 'abi',
-               'sta': 'fasta',
+               'fasta': 'fasta',
                'seq': 'fasta'}
 
 channels = ('DATA9', 'DATA10', 'DATA11', 'DATA12')
@@ -19,7 +19,6 @@ CLUSTAL_PATH = "extra\clustal-omega-1.2.2-win64\clustalo.exe"
 # TODO: Add clustal Support for mac and linux
 #       Add support for other filetypes
 #       Implement Model|View design pattern
-#       Add Save function
 #       Shifter to adjust Amino Acid nunber
 #       Codon Table With E. coli codon freq
 
@@ -159,20 +158,6 @@ class MainWindow(QtWidgets.QMainWindow):
         l2 = l1 + self.base_per_window
         self.graphWidget.setRange(xRange=[l1, l2], padding=0)
 
-    def init_menu(self):
-        """
-        Initialize file menue
-        """
-        # Create menu bar
-        menu_bar = self.menuBar()
-
-        # Create actions and bind to functions
-        file_menu = menu_bar.addMenu('File')
-        quit_action = QtWidgets.QAction('Quit', self)
-        quit_action.triggered.connect(self.quit_app)
-
-        # Add actions to menu
-        file_menu.addAction(quit_action)
 
     def run_alignment(self):
         """
@@ -200,6 +185,7 @@ class MainWindow(QtWidgets.QMainWindow):
             Name of sequence file
         """
         # Use only the last n letters of the file name that fit in the label widget layout
+        name = os.path.basename(name)
         start_val = self.letter_per_label
         pre_text = '...'
         if len(name) < start_val + 4:
@@ -280,10 +266,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.text.clear()
         self.hide_trace()
 
-        self.seq_label_layout.itemAt(0).widget().setParent(None)
-        for i in reversed(range(self.trace_button_layout.count())):
-            self.trace_button_layout.itemAt(i).widget().setParent(None)
-            self.seq_label_layout.itemAt(i).widget().setParent(None)
+        if self.seq_label_layout.count():
+            self.seq_label_layout.itemAt(0).widget().setParent(None)
+            for i in reversed(range(self.trace_button_layout.count())):
+                self.trace_button_layout.itemAt(i).widget().setParent(None)
+                self.seq_label_layout.itemAt(i).widget().setParent(None)
 
         self.button_list = []
 
@@ -344,6 +331,105 @@ class MainWindow(QtWidgets.QMainWindow):
         self.active_trace.setText("Update")
         self.active_trace.setStyleSheet("QPushButton { color: red;}")
 
+    def init_menu(self):
+        """
+        Initialize file menue
+        """
+        # Create menu bar
+        menu_bar = self.menuBar()
+
+        # Create actions and bind to functions
+        file_menu = menu_bar.addMenu('File')
+        save_action = QtWidgets.QAction('Save', self)
+        save_action.triggered.connect(self.save)
+        quit_action = QtWidgets.QAction('Quit', self)
+        quit_action.triggered.connect(self.quit_app)
+
+        # Add actions to menu
+        file_menu.addAction(save_action)
+        file_menu.addAction(quit_action)
+
+    def set_save_dir(self, line_edit):
+        self.save_dir = QtWidgets.QFileDialog().getExistingDirectory()
+        line_edit.setText(self.save_dir)
+
+    def save(self):
+        """Protocol for saving sequencing results in a standardized strain database format"""
+        self.save_window = QtWidgets.QWidget()
+        self.save_window.setWindowTitle("Save Files")
+        self.save_dict = {}
+        popup_layout = QtWidgets.QGridLayout(self.save_window)
+
+        directory_label = QtWidgets.QLabel()
+        directory_label.setText("Directory:")
+        directory_input = QtWidgets.QLineEdit()
+        directory_button = QtWidgets.QPushButton()
+        directory_button.setText("Set Directory")
+        directory_button.clicked.connect(partial(self.set_save_dir, line_edit=directory_input))
+        popup_layout.addWidget(directory_label, 0, 0)
+        popup_layout.addWidget(directory_input, 0, 1, 1, 2)
+        popup_layout.addWidget(directory_button, 0, 3)
+
+        plasmid_label = QtWidgets.QLabel()
+        plasmid_label.setText("Plasmid")
+        plasmid_input = QtWidgets.QLineEdit()
+        popup_layout.addWidget(plasmid_label, 1, 0)
+        popup_layout.addWidget(plasmid_input, 1, 1, 1, 2)
+
+        protein_label = QtWidgets.QLabel()
+        protein_label.setText("Protein")
+        protein_input = QtWidgets.QLineEdit()
+        popup_layout.addWidget(protein_label, 2, 0)
+        popup_layout.addWidget(protein_input, 2, 1, 1, 2)
+        le = []
+        for i, label in enumerate(self.labels[2:]):
+
+            j = popup_layout.count() + 1
+            q_lab = QtWidgets.QLabel()
+            q_lab.setText(label)
+            chkbox = QtWidgets.QCheckBox()
+            le.append(QtWidgets.QLineEdit())
+            le[i].setPlaceholderText('Primer')
+            chkbox.stateChanged.connect(partial(self.check_label_event, checkbox_widget=chkbox,
+                                                label_widget=q_lab, le=le[i]))
+
+            popup_layout.addWidget(q_lab, j, 0)
+            popup_layout.addWidget(chkbox, j, 1)
+            popup_layout.addWidget(le[i])
+
+        save_button = QtWidgets.QPushButton()
+        save_button.setText("Save")
+        save_button.clicked.connect(partial(self._save, plasmid=plasmid_input,
+                                            protein=protein_input))
+
+        popup_layout.addWidget(save_button, popup_layout.count() + 1, 3)
+        self.save_window.show()
+
+    def check_label_event(self, checkbox_widget, label_widget, le):
+        if checkbox_widget.isChecked():
+            source = self.listWidget.get_full_path(partial=label_widget.text())
+            self.save_dict[label_widget.text()] = (source, le)
+        elif label_widget.text() in self.save_dict:
+            del self.save_dict[label_widget.text()]
+        else:
+            return None
+
+    def _save(self, plasmid, protein):
+        plasmid = plasmid.text()
+        protein = protein.text()
+        protein = "_".join(protein.split(" "))
+        new_dir = os.path.join(self.save_dir, '_'.join([plasmid, protein]))
+        os.makedirs(new_dir)
+
+        for key in self.save_dict:
+            source = self.save_dict[key][0]
+            ext = source.split(".")[-1]
+            dest = os.path.join(new_dir, '_'.join([plasmid, protein]) + '_' + '.'.join([self.save_dict[key][1].text(), ext]))
+            shutil.copy(source, dest)
+
+        self.save_window.close()
+
+
     def quit_app(self):
         """Exit the application"""
         QtWidgets.qApp.quit()
@@ -393,6 +479,10 @@ class FileList(QtWidgets.QListWidget):
         """Remove file from list"""
         for item in self.selectedItems():
             self.takeItem(self.row(item))
+
+    def get_full_path(self, partial):
+        full_path = [self.item(i).text() for i in range(self.count()) if partial in self.item(i).text()][0]
+        return full_path
 
     def move_up(self):
         """Move file up one in list"""
@@ -529,7 +619,7 @@ def read_file(file_name):
         name of file to read
     """
     # get file extension and call appropriate Biopython subfunction
-    ext = file_name[-3:]
+    ext = file_name.split('.')[-1]
     file_format = format_dict[ext]
     return SeqIO.read(file_name, file_format)
 
