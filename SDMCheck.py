@@ -19,10 +19,7 @@ CLUSTAL_PATH = "extra\clustal-omega-1.2.2-win64\clustalo.exe"
 # TODO: Add clustal Support for mac and linux
 #       Add support for other filetypes
 #       Implement Model|View design pattern
-#       Implement reset button
-#       Clear texbox on re-align
 #       Add Save function
-#       Number Amino Acids
 #       Shifter to adjust Amino Acid nunber
 #       Codon Table With E. coli codon freq
 
@@ -38,7 +35,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.codon_height, self.codon_width = 200, 200
         self.label_width = 300
         self.button_width = 90
-        self.graph_text_diff = 36
+        self.graph_x_diff, self.graph_y_diff = 36, 36
         self.pad = 10
 
         # Set character parameters
@@ -47,7 +44,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.char_height = QtGui.QFontMetrics(QtGui.QFont("Courier", 15)).height()
 
         # Set window parameters
-        self.window_width = 4 * self.pad + self.label_width + self.text_width + self.graph_text_diff + self.button_width
+        self.window_width = 4 * self.pad + self.label_width + self.text_width + self.graph_x_diff + self.button_width
         self.window_height = 4 * self.pad + self.list_height + self.text_height + self.codon_height
         self.setWindowTitle("SDMCheck")
         self.resize(self.window_width, self.window_height)
@@ -95,23 +92,28 @@ class MainWindow(QtWidgets.QMainWindow):
         self.file_button_layout.addWidget(self.align)
         self.align.clicked.connect(self.run_alignment)
 
+        self.reset = QtWidgets.QPushButton("Reset", self.list_button_widget)
+        self.file_button_layout.addWidget(self.reset)
+        self.reset.clicked.connect(self._reset)
+
         # Create label widget for sequence alignment
         self.seq_label_widget = QtWidgets.QWidget(self.centralwidget)
         self.seq_label_layout = QtWidgets.QVBoxLayout(self.seq_label_widget)
         self.seq_label_layout.setAlignment(QtCore.Qt.AlignTop)
         self.seq_label_layout.setContentsMargins(0,0.5,0,0)
         self.seq_label_layout.setSpacing(0)
-        self.seq_label_widget.setGeometry(QtCore.QRect(self.pad, 2 * self.pad + self.list_height,
+        self.seq_label_widget.setGeometry(QtCore.QRect(self.pad, 2 * self.pad + self.list_height + self.graph_y_diff,
                                                        self.label_width, self.text_height))
 
         # Create Graph widget for plotting traces
         self.graphWidget = pg.PlotWidget(self.centralwidget)
         self.graphWidget.setBackground('w')
+        self.graphWidget.showAxis('top')
         self.graphWidget.setRange(xRange=[0, self.base_per_window], padding=0)
         self.graphWidget.setMouseEnabled(x=False)
         self.graphWidget.setGeometry(QtCore.QRect(2 * self.pad + self.label_width, 2 * self.pad + self.list_height,
-                                                  self.text_width + self.graph_text_diff,
-                                                  self.text_height - 30))
+                                                  self.text_width + self.graph_x_diff,
+                                                  self.text_height))
 
         # Create text widget superimposed on graph widget for sequence alignments
         self.text = QtWidgets.QPlainTextEdit(self.centralwidget)
@@ -120,8 +122,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.text.setFrameStyle(QtWidgets.QFrame.NoFrame)
         self.text.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
         self.highlight = SnpHighlighter(self.text.document())
-        self.text.setGeometry(QtCore.QRect(2 * self.pad  + self.label_width + self.graph_text_diff,
-                                           2 * self.pad + self.list_height,
+        self.text.setGeometry(QtCore.QRect(2 * self.pad  + self.label_width + self.graph_x_diff,
+                                           2 * self.pad + self.list_height + self.graph_y_diff,
                                            self.text_width, self.text_height))
 
         # Link graph widget and text widget scrollbar
@@ -135,8 +137,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.trace_button_layout.setSpacing(0)
         self.trace_button_layout.setContentsMargins(0,0,0,0)
         self.text_button_widget.setGeometry(
-            QtCore.QRect(self.pad * 3 + self.graph_text_diff + self.text_width + self.label_width,
-                         self.pad * 2 + self.list_height + 2 * self.char_height,
+            QtCore.QRect(self.pad * 3 + self.graph_x_diff + self.text_width + self.label_width,
+                         self.pad * 2 + self.graph_y_diff + self.list_height + 2 * self.char_height,
                          self.button_width, self.text_height))
 
         # Set central widget
@@ -145,7 +147,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Initialize variables used by other methods
         self.labels = []
         self.button_list = []
-        self.alignment, self.seq_objs, self.ref_translation, self.ref_translate_aln = [None] * 4
+        self.alignment, self.seq_objs, self.ref_translation, self.ref_translate_aln, self.active_trace = [None] * 5
 
     def scroll_update(self):
         """
@@ -184,8 +186,11 @@ class MainWindow(QtWidgets.QMainWindow):
         if not self.listWidget.ref:
             warn_user("Warning: You cannot perform alignment without first marking a reference sequence.")
 
-        self.alignment, self.seq_objs = self.listWidget.run_alignment()
+        # Remove current alignmnet if it exists
+        if self.button_list:
+            self.remove_alignment()
 
+        self.alignment, self.seq_objs = self.listWidget.run_alignment()
         self.show_alignment()
 
     def add_sequence_label(self, name):
@@ -218,19 +223,25 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Perform alignment of AA Seq to Nucleotide
         self.ref_translate_aln = ""
-        PROT_counter = 0
+        self.top_axis_ticks = []
+        prot_counter = 0
         DNA_counter = 0
-        for ltr in self.alignment[0]:
-            if ltr != '-' and PROT_counter < len(self.ref_translation):
+        for i, ltr in enumerate(self.alignment[0]):
+            if ltr != '-' and prot_counter < len(self.ref_translation):
                 if (DNA_counter % 3) == 0:
-                    self.ref_translate_aln += self.ref_translation[PROT_counter]
-                    PROT_counter += 1
+                    self.top_axis_ticks.append(i+0.9)
+                    self.ref_translate_aln += self.ref_translation[prot_counter]
+                    prot_counter += 1
                     DNA_counter += 1
                 else:
                     self.ref_translate_aln += " "
                     DNA_counter += 1
             else:
                 self.ref_translate_aln += " "
+
+        # Show amino acid numbers
+        self.ax_top = self.graphWidget.getAxis('top')
+        self.ax_top.setTicks([list(zip(self.top_axis_ticks, np.arange(len(self.top_axis_ticks)) + 1))])
 
     def show_alignment(self):
         """
@@ -240,11 +251,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.translate_reference_sequence()
 
         # Add amino acid sequence to text box
-        self.add_sequence_label('Ref Amino Acid Seq')
+        self.add_sequence_label('Amino Acid Reference Seq')
         self.text.insertPlainText(self.ref_translate_aln + '\n')
 
         # Add reference sequence to text box
-        self.add_sequence_label('Reference Seq')
+        self.add_sequence_label('DNA Reference Seq')
         self.text.insertPlainText(str(self.alignment[0].seq) + '\n')
 
         # Add all other sequences in MSA. +1 offset to skip the reference sequence
@@ -264,9 +275,32 @@ class MainWindow(QtWidgets.QMainWindow):
         self.trace_button_layout.addWidget(self.hide_trace_button)
         self.hide_trace_button.clicked.connect(self.hide_trace)
 
+    def remove_alignment(self):
+        """Clear textbox, graph widget, labels and "View Trace" buttons"""
+        self.text.clear()
+        self.hide_trace()
+
+        self.seq_label_layout.itemAt(0).widget().setParent(None)
+        for i in reversed(range(self.trace_button_layout.count())):
+            self.trace_button_layout.itemAt(i).widget().setParent(None)
+            self.seq_label_layout.itemAt(i).widget().setParent(None)
+
+        self.button_list = []
+
+    def _reset(self):
+        """Remove all items from list, all alignments, "Show trace" buttons and sequence lables"""
+        self.remove_alignment()
+        self.listWidget.clear()
+
     def hide_trace(self):
         """Remove trace from graph"""
         self.graphWidget.clear()
+        if self.active_trace is not None:
+            self.active_trace.setText("View Trace")
+            self.active_trace.setStyleSheet("QPushButton { color: black;}")
+            self.ax.setTicks([list(zip(np.arange(0, len(self.alignment[0]), 10),
+                                       np.arange(0, len(self.alignment[0]), 10)))])
+
 
     def show_trace(self, seq_id, seq_idx):
         """
@@ -277,8 +311,15 @@ class MainWindow(QtWidgets.QMainWindow):
         :param seq_idx:
             index of sequence in alignment
         """
-        # Hide traces if any are plotted
-        self.hide_trace()
+
+        # Hide traces if any are plotted and reset "Show Trace"button
+        if self.active_trace is not None:
+            self.hide_trace()
+            self.active_trace.setText("View Trace")
+            self.active_trace.setStyleSheet("QPushButton { color: black;}")
+
+        # Set active trace
+        self.active_trace = self.button_list[seq_idx - 1]
 
         # Align traces to the sequence as it appears in the text box
         doc = self.text.document()
@@ -296,12 +337,12 @@ class MainWindow(QtWidgets.QMainWindow):
             self.graphWidget.plot(new_x, seq_obj.annotations['abif_raw'][channel], name="GATC"[i], pen=(i,4))
 
         # Set x-axis labels to corresponding nucleotide
-        ax = self.graphWidget.getAxis('bottom')
-        ax.setTicks([list(zip(np.arange(len(x_tick_labels)) + 0.9, x_tick_labels))])
+        self.ax = self.graphWidget.getAxis('bottom')
+        self.ax.setTicks([list(zip(np.arange(len(x_tick_labels)) + 0.9, x_tick_labels))])
 
         # Change "Show Trace" button to "Update" and mark red to show it is the active trace
-        self.button_list[seq_idx - 1].setText("Update")
-        self.button_list[seq_idx - 1].setStyleSheet("QPushButton { color: red; }")
+        self.active_trace.setText("Update")
+        self.active_trace.setStyleSheet("QPushButton { color: red;}")
 
     def quit_app(self):
         """Exit the application"""
@@ -458,8 +499,11 @@ class SnpHighlighter(QtGui.QSyntaxHighlighter):
         :param text, str
             block of text to be highlighted
         """
-        print(type(text))
-        # if line begins with a space then ignore it (No nucleotides)
+        # If there are no lines do nothing
+        if not self.document.toPlainText():
+            return None
+
+        # If line begins with a space then ignore it (No nucleotides)
         if len(text) > 0 and text[0] == " ":
             return None
 
