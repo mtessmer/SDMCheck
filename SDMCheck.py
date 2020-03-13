@@ -2,7 +2,7 @@ from PyQt5 import QtWidgets, QtCore, QtGui
 import pyqtgraph as pg
 import numpy as np
 from scipy.interpolate import interp1d
-import sys, os, shutil
+import sys, os, shutil, platform
 from functools import partial
 from Bio import SeqIO, AlignIO, pairwise2
 from Bio.Align.Applications import ClustalOmegaCommandline
@@ -13,11 +13,14 @@ format_dict = {'ab1': 'abi',
 
 channels = ('DATA9', 'DATA10', 'DATA11', 'DATA12')
 
-CLUSTAL_PATH = "extra\clustal-omega-1.2.2-win64\clustalo.exe"
+clustal_paths = {'Windows': os.path.normpath('extra\clustal-omega-1.2.2-win64\clustalo.exe'),
+                 'Darwin': os.path.normpath('extra\clustal-omega-1.2.3-macosx'),
+                 'Linux': os.path.normpath('extra\clustalo-1.2.4-linux-x86_64')}
+
+CLUSTAL_PATH = clustal_paths[platform.system()]
 
 
-# TODO: Add clustal Support for mac and linux
-#       Add support for other filetypes
+# TODO: Add support for other filetypes
 #       Implement Model|View design pattern
 #       Shifter to adjust Amino Acid nunber
 #       Codon Table With E. coli codon freq
@@ -605,7 +608,7 @@ class SnpHighlighter(QtGui.QSyntaxHighlighter):
             diff = len(text) - len(ref)
             ref += diff * '-'
 
-        # Get indicies of `text` nucleotides that do not match reference sequence
+        # Get indices of `text` nucleotides that do not match reference sequence
         idx = [i for i in range(len(text)) if text[i] != ref[i]]
 
         # Highlight mismatches with reference sequence as red text
