@@ -2,10 +2,11 @@ from PyQt5 import QtWidgets, QtCore, QtGui
 import pyqtgraph as pg
 import numpy as np
 from scipy.interpolate import interp1d
-import sys, os, shutil, platform
+import sys, os, shutil, platform, csv
 from functools import partial
 from Bio import SeqIO, AlignIO, pairwise2
 from Bio.Align.Applications import ClustalOmegaCommandline
+from fbs_runtime.application_context.PyQt5 import ApplicationContext
 
 format_dict = {'ab1': 'abi',
                'fasta': 'fasta',
@@ -18,12 +19,11 @@ clustal_paths = {'Windows': os.path.normpath('extra\clustal-omega-1.2.2-win64\cl
                  'Linux': os.path.normpath('extra\clustalo-1.2.4-linux-x86_64')}
 
 CLUSTAL_PATH = clustal_paths[platform.system()]
+CODON_PATH = os.path.normpath("extra\codon")
 
 
 # TODO: Add support for other filetypes
 #       Implement Model|View design pattern
-#       Shifter to adjust Amino Acid nunber
-#       Codon Table With E. coli codon freq
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -33,9 +33,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Set widget size parameters
         self.text_height, self.text_width = 300, 1000
-        self.list_height, self.list_width = 200, 500
-        self.codon_height, self.codon_width = 200, 200
+        self.list_height, self.list_width = 400, 400
         self.label_width = 300
+        self.table_width = 526
         self.button_width = 90
         self.graph_x_diff, self.graph_y_diff = 36, 36
         self.pad = 10
@@ -46,11 +46,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.char_height = QtGui.QFontMetrics(QtGui.QFont("Courier", 15)).height()
 
         # Set window parameters
-        self.window_width = 4 * self.pad + self.label_width + self.text_width + self.graph_x_diff + self.button_width
-        self.window_height = 4 * self.pad + self.list_height + self.text_height + self.codon_height
+        self.window_width = 4 * self.pad + 2 * self.label_width + self.text_width + self.graph_x_diff
+        self.window_height = 3 * self.pad + self.list_height + self.text_height + 100
         self.setWindowTitle("SDMCheck")
         self.resize(self.window_width, self.window_height)
-        self.list_start = (self.window_width - (self.list_width + self.button_width + self.pad)) / 2
+        self.list_start = 2 * self.pad + self.label_width #(self.window_width - (self.list_width + self.button_width + 2 * self.pad + self.table_width)) / 2
 
         # Initialize file menu
         self.init_menu()
@@ -98,6 +98,29 @@ class MainWindow(QtWidgets.QMainWindow):
         self.file_button_layout.addWidget(self.reset)
         self.reset.clicked.connect(self._reset)
 
+        # Create Codon Widget
+        self.codon_widget = QtWidgets.QWidget(self.centralwidget)
+        self.codon_layout = QtWidgets.QVBoxLayout(self.codon_widget)
+        self.codon_layout.setContentsMargins(0, 0, 0, 0)
+        self.sp_select = QtWidgets.QComboBox()
+        self.codon_layout.addWidget(self.sp_select)
+        self.codon_widget.setGeometry(QtCore.QRect(self.list_start + self.list_width + self.pad * 2 + self.button_width,
+                                                   self.pad, self.table_width, self.list_height))
+
+        codon_files = [f for f in os.listdir(CODON_PATH)]
+        for codon_file in codon_files:
+            self.sp_select.addItem(codon_file[:-4])
+            self.sp_select.activated[str].connect(self.set_codon_table)
+
+        self.codon_model = QtGui.QStandardItemModel()
+        self.codon_table = QtWidgets.QTableView()
+        self.codon_table.horizontalHeader().hide()
+        self.codon_table.verticalHeader().hide()
+        self.codon_table.setFont(QtGui.QFont("Roboto", 9))
+
+        self.codon_table.setModel(self.codon_model)
+        self.codon_layout.addWidget(self.codon_table)
+
         # Create label widget for sequence alignment
         self.seq_label_widget = QtWidgets.QWidget(self.centralwidget)
         self.seq_label_layout = QtWidgets.QVBoxLayout(self.seq_label_widget)
@@ -111,6 +134,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.graphWidget = pg.PlotWidget(self.centralwidget)
         self.graphWidget.setBackground('w')
         self.graphWidget.showAxis('top')
+        self.bottom_ax = self.graphWidget.getAxis('bottom')
+        self.top_ax = self.graphWidget.getAxis('top')
         self.graphWidget.setRange(xRange=[0, self.base_per_window], padding=0)
         self.graphWidget.setMouseEnabled(x=False)
         self.graphWidget.setGeometry(QtCore.QRect(2 * self.pad + self.label_width, 2 * self.pad + self.list_height,
@@ -137,11 +162,21 @@ class MainWindow(QtWidgets.QMainWindow):
         self.trace_button_layout = QtWidgets.QVBoxLayout(self.text_button_widget)
         self.trace_button_layout.setAlignment(QtCore.Qt.AlignTop)
         self.trace_button_layout.setSpacing(0)
-        self.trace_button_layout.setContentsMargins(0,0,0,0)
+        self.trace_button_layout.setContentsMargins(0, 0, 0, 0)
         self.text_button_widget.setGeometry(
             QtCore.QRect(self.pad * 3 + self.graph_x_diff + self.text_width + self.label_width,
                          self.pad * 2 + self.graph_y_diff + self.list_height + 2 * self.char_height,
                          self.button_width, self.text_height))
+
+        # Setup amino acid number increment widget
+        self.aa_inc_widget = QtWidgets.QWidget(self.centralwidget)
+        self.aa_inc_layout = QtWidgets.QHBoxLayout(self.aa_inc_widget)
+        self.aa_inc_layout.setSpacing(0)
+        self.aa_inc_layout.setContentsMargins(0, 0, 0, 0)
+        self.aa_inc_widget.setGeometry(
+            QtCore.QRect(self.pad * 3 + self.graph_x_diff + self.text_width + self.label_width,
+                         self.pad * 2 + self.list_height,
+                         self.button_width, 2 * self.char_height))
 
         # Set central widget
         self.setCentralWidget(self.centralwidget)
@@ -149,7 +184,19 @@ class MainWindow(QtWidgets.QMainWindow):
         # Initialize variables used by other methods
         self.labels = []
         self.button_list = []
+        self.top_axis_ticks = []
+        self.top_axis_values = []
         self.alignment, self.seq_objs, self.ref_translation, self.ref_translate_aln, self.active_trace = [None] * 5
+
+    def set_codon_table(self, species):
+        self.codon_model.clear()
+        with open(os.path.join(CODON_PATH, species + '.csv')) as codon_file:
+            for row in csv.reader(codon_file):
+                items = [ QtGui.QStandardItem(field) for field in row]
+                self.codon_model.appendRow(items)
+
+        self.codon_table.resizeColumnsToContents()
+        self.codon_table.resizeRowsToContents()
 
     def scroll_update(self):
         """
@@ -160,7 +207,6 @@ class MainWindow(QtWidgets.QMainWindow):
         l1 = r * self.base_per_window / step_size
         l2 = l1 + self.base_per_window
         self.graphWidget.setRange(xRange=[l1, l2], padding=0)
-
 
     def run_alignment(self):
         """
@@ -213,6 +259,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Perform alignment of AA Seq to Nucleotide
         self.ref_translate_aln = ""
         self.top_axis_ticks = []
+        self.top_axis_values = []
         prot_counter = 0
         DNA_counter = 0
         for i, ltr in enumerate(self.alignment[0]):
@@ -228,9 +275,17 @@ class MainWindow(QtWidgets.QMainWindow):
             else:
                 self.ref_translate_aln += " "
 
+
         # Show amino acid numbers
-        self.ax_top = self.graphWidget.getAxis('top')
-        self.ax_top.setTicks([list(zip(self.top_axis_ticks, np.arange(len(self.top_axis_ticks)) + 1))])
+        self.top_axis_values = np.arange((len(self.top_axis_ticks))) + 1
+        self.set_top_xticks()
+
+    def adjust_xticks(self, value):
+        self.top_axis_values += value
+        self.set_top_xticks()
+
+    def set_top_xticks(self):
+        self.top_ax.setTicks([list(zip(self.top_axis_ticks, self.top_axis_values))])
 
     def show_alignment(self):
         """
@@ -238,6 +293,7 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         # Translate reference sequence
         self.translate_reference_sequence()
+        self.add_aa_inc_buttons()
 
         # Add amino acid sequence to text box
         self.add_sequence_label('Amino Acid Reference Seq')
@@ -264,16 +320,45 @@ class MainWindow(QtWidgets.QMainWindow):
         self.trace_button_layout.addWidget(self.hide_trace_button)
         self.hide_trace_button.clicked.connect(self.hide_trace)
 
+    def add_aa_inc_buttons(self):
+        """add buttons to increment amino acid label number """
+        minus_ten = QtWidgets.QPushButton("--", self.aa_inc_widget)
+        minus_ten.clicked.connect(partial(self.adjust_xticks, value=-10))
+        self.aa_inc_layout.addStretch()
+        self.aa_inc_layout.addWidget(minus_ten)
+
+        minus = QtWidgets.QPushButton("-", self.aa_inc_widget)
+        minus.clicked.connect(partial(self.adjust_xticks, value=-1))
+        self.aa_inc_layout.addStretch()
+        self.aa_inc_layout.addWidget(minus)
+
+        plus = QtWidgets.QPushButton("+", self.aa_inc_widget)
+        plus.clicked.connect(partial(self.adjust_xticks, value=1))
+        self.aa_inc_layout.addStretch()
+        self.aa_inc_layout.addWidget(plus)
+
+        plus_ten = QtWidgets.QPushButton("++", self.aa_inc_widget)
+        plus_ten.clicked.connect(partial(self.adjust_xticks, value=10))
+        self.aa_inc_layout.addStretch()
+        self.aa_inc_layout.addWidget(plus_ten)
+
+
     def remove_alignment(self):
         """Clear textbox, graph widget, labels and "View Trace" buttons"""
         self.text.clear()
         self.hide_trace()
 
+
         if self.seq_label_layout.count():
+            # Remove "View Trace" and "Hide Trace" buttons
             self.seq_label_layout.itemAt(0).widget().setParent(None)
             for i in reversed(range(self.trace_button_layout.count())):
                 self.trace_button_layout.itemAt(i).widget().setParent(None)
                 self.seq_label_layout.itemAt(i).widget().setParent(None)
+
+            # Remove amino acid increment buttons
+            for i in reversed(range(self.aa_inc_layout.count())):
+                self.aa_inc_layout.itemAt(i).widget().setParent(None)
 
         self.button_list = []
 
@@ -288,9 +373,8 @@ class MainWindow(QtWidgets.QMainWindow):
         if self.active_trace is not None:
             self.active_trace.setText("View Trace")
             self.active_trace.setStyleSheet("QPushButton { color: black;}")
-            self.ax.setTicks([list(zip(np.arange(0, len(self.alignment[0]), 10),
-                                       np.arange(0, len(self.alignment[0]), 10)))])
-
+            self.bottom_ax.setTicks([list(zip(np.arange(0, len(self.alignment[0]), 10),
+                                              np.arange(0, len(self.alignment[0]), 10)))])
 
     def show_trace(self, seq_id, seq_idx):
         """
@@ -327,8 +411,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.graphWidget.plot(new_x, seq_obj.annotations['abif_raw'][channel], name="GATC"[i], pen=(i,4))
 
         # Set x-axis labels to corresponding nucleotide
-        self.ax = self.graphWidget.getAxis('bottom')
-        self.ax.setTicks([list(zip(np.arange(len(x_tick_labels)) + 0.9, x_tick_labels))])
+        self.bottom_ax.setTicks([list(zip(np.arange(len(x_tick_labels)) + 0.9, x_tick_labels))])
 
         # Change "Show Trace" button to "Update" and mark red to show it is the active trace
         self.active_trace.setText("Update")
@@ -644,10 +727,11 @@ def warn_user(text):
 
 def main():
     """Main Qt Application"""
+    appctxt = ApplicationContext()
     app = QtWidgets.QApplication(sys.argv)
     main_window = MainWindow()
     main_window.show()
-    sys.exit(app.exec_())
+    sys.exit(appctxt.app.exec_())
 
 
 if __name__ == '__main__':
