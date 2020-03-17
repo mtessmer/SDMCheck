@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 from PyQt5 import QtWidgets, QtCore, QtGui
 import pyqtgraph as pg
 import numpy as np
@@ -24,6 +25,7 @@ CODON_PATH = os.path.normpath("extra\codon")
 
 # TODO: Add support for other filetypes
 #       Implement Model|View design pattern
+#       Fix bug when updating/showing trace of sequences that have deleted nucleotides
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -275,7 +277,6 @@ class MainWindow(QtWidgets.QMainWindow):
             else:
                 self.ref_translate_aln += " "
 
-
         # Show amino acid numbers
         self.top_axis_values = np.arange((len(self.top_axis_ticks))) + 1
         self.set_top_xticks()
@@ -358,7 +359,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
             # Remove amino acid increment buttons
             for i in reversed(range(self.aa_inc_layout.count())):
-                self.aa_inc_layout.itemAt(i).widget().setParent(None)
+                item = self.aa_inc_layout.takeAt(i)
+                del item
+
 
         self.button_list = []
 
@@ -366,6 +369,8 @@ class MainWindow(QtWidgets.QMainWindow):
         """Remove all items from list, all alignments, "Show trace" buttons and sequence lables"""
         self.remove_alignment()
         self.listWidget.clear()
+        self.listWidget.ref = None
+        self.labels = []
 
     def hide_trace(self):
         """Remove trace from graph"""
@@ -514,7 +519,6 @@ class MainWindow(QtWidgets.QMainWindow):
             shutil.copy(source, dest)
 
         self.save_window.close()
-
 
     def quit_app(self):
         """Exit the application"""
@@ -724,14 +728,12 @@ def warn_user(text):
     msg.exec_()
 
 
-
 def main():
     """Main Qt Application"""
-    appctxt = ApplicationContext()
     app = QtWidgets.QApplication(sys.argv)
     main_window = MainWindow()
     main_window.show()
-    sys.exit(appctxt.app.exec_())
+    sys.exit(app.exec_())
 
 
 if __name__ == '__main__':
