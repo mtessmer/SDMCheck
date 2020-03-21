@@ -4,6 +4,7 @@ import pyqtgraph as pg
 import numpy as np
 from scipy.interpolate import interp1d
 import sys, os, shutil, platform, csv
+from pathlib import Path
 from functools import partial
 from Bio import SeqIO, AlignIO, pairwise2
 from Bio.Align.Applications import ClustalOmegaCommandline
@@ -14,13 +15,13 @@ format_dict = {'ab1': 'abi',
 
 channels = ('DATA9', 'DATA10', 'DATA11', 'DATA12')
 
-clustal_paths = {'Windows': os.path.normpath('extra\clustal-omega-1.2.2-win64\clustalo.exe'),
-                 'Darwin': os.path.normpath('extra\clustal-omega-1.2.3-macosx'),
-                 'Linux': os.path.normpath('extra\clustalo-1.2.4-linux-x86_64')}
+clustal_paths = {'Windows': Path('extra/clustal-omega-1.2.2-win64/clustalo.exe'),
+                 'Darwin': Path('extra/clustal-omega-1.2.3-macosx'),
+                 'Linux': Path('extra/clustalo-1.2.4-linux-x86_64')}
 
 CLUSTAL_PATH = clustal_paths[platform.system()]
-CODON_PATH = os.path.normpath("extra\codon")
-
+CODON_PATH = Path("extra/codon")
+print(CLUSTAL_PATH)
 
 # TODO: Add support for other filetypes
 #       Implement Model|View design pattern
@@ -191,7 +192,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def set_codon_table(self, species):
         self.codon_model.clear()
-        with open(os.path.join(CODON_PATH, species + '.csv')) as codon_file:
+        with open(CODON_PATH / (species + '.csv')) as codon_file:
             for row in csv.reader(codon_file):
                 items = [ QtGui.QStandardItem(field) for field in row]
                 self.codon_model.appendRow(items)
@@ -472,11 +473,14 @@ class MainWindow(QtWidgets.QMainWindow):
         popup_layout.addWidget(protein_label, 2, 0)
         popup_layout.addWidget(protein_input, 2, 1, 1, 2)
         le = []
+
+        # TODO: fix this to keep track of full path
         for i, label in enumerate(self.labels[2:]):
 
             j = popup_layout.count() + 1
             q_lab = QtWidgets.QLabel()
             q_lab.setText(label)
+            q_lab.mypath = "Test"
             chkbox = QtWidgets.QCheckBox()
             le.append(QtWidgets.QLineEdit())
             le[i].setPlaceholderText('Primer')
@@ -508,16 +512,32 @@ class MainWindow(QtWidgets.QMainWindow):
         plasmid = plasmid.text()
         protein = protein.text()
         protein = "_".join(protein.split(" "))
-        new_dir = os.path.join(self.save_dir, '_'.join([plasmid, protein]))
-        os.makedirs(new_dir)
+        new_dir = Path(self.save_dir) / '_'.join([plasmid, protein])
 
+        # Check for missing primer names
+        for key in self.save_dict:
+            print(self.save_dict[key][1])
+            if self.save_dict[key][1].text() == "":
+                warn_user("You must provide a primer name for sequence " + self.save_dict[key][0])
+                return None
+
+        # Check for preexisting diriectories with the same name
+        if Path(new_dir).exists():
+            overwrite = prompt_user("{} already exists. Would you like to overwrite this record?".format(new_dir))
+            if not overwrite:
+                return None
+            else:
+                shutil.rmtree(new_dir)
+
+        os.mkdir(new_dir)
         for key in self.save_dict:
             source = self.save_dict[key][0]
             ext = source.split(".")[-1]
-            dest = os.path.join(new_dir, '_'.join([plasmid, protein]) + '_' + '.'.join([self.save_dict[key][1].text(), ext]))
-            shutil.copy(source, dest)
+            dest = new_dir / ('_'.join([plasmid, protein]) + '_' + '.'.join([self.save_dict[key][1].text(), ext]))
+            shutil.copy(Path(source), dest)
 
         self.save_window.close()
+        self.save_dict = {}
 
     def quit_app(self):
         """Exit the application"""
@@ -570,6 +590,12 @@ class FileList(QtWidgets.QListWidget):
             self.takeItem(self.row(item))
 
     def get_full_path(self, partial):
+
+        # Remove elipsis if present
+        if partial[:3] == '...':
+            partial = partial[3:]
+
+        # TODO: Fix this so that there can be only one
         full_path = [self.item(i).text() for i in range(self.count()) if partial in self.item(i).text()][0]
         return full_path
 
@@ -656,8 +682,7 @@ class FileList(QtWidgets.QListWidget):
             os.remove('seqs.aln')
 
         # Perform alignment
-        clustal_omega_exe = os.path.join(os.path.dirname(__file__), CLUSTAL_PATH)
-        cline = ClustalOmegaCommandline(clustal_omega_exe, infile="seqs.fasta", outfile="seqs.aln")
+        cline = ClustalOmegaCommandline(CLUSTAL_PATH, infile="seqs.fasta", outfile="seqs.aln")
         stdout, stderr = cline()
 
         # Read alignment file
@@ -712,6 +737,14 @@ def read_file(file_name):
     file_format = format_dict[ext]
     return SeqIO.read(file_name, file_format)
 
+def prompt_user(text, title="Overwrite record?"):
+    msg = QtWidgets.QMessageBox()
+    msg.setText(text)
+    msg.setWindowTitle(title)
+    msg.setStandardButtons(QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
+    returnValue = msg.exec()
+
+    return returnValue == QtWidgets.QMessageBox.Yes
 
 def warn_user(text):
     """
