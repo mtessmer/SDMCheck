@@ -7,7 +7,6 @@ import sys, os, shutil, platform, csv
 from functools import partial
 from Bio import SeqIO, AlignIO, pairwise2
 from Bio.Align.Applications import ClustalOmegaCommandline
-from fbs_runtime.application_context.PyQt5 import ApplicationContext
 
 format_dict = {'ab1': 'abi',
                'fasta': 'fasta',
