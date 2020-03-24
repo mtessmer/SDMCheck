@@ -9,6 +9,7 @@ from functools import partial
 from Bio import SeqIO, AlignIO, pairwise2
 from Bio.Align.Applications import ClustalOmegaCommandline
 
+QtWidgets.QApplication.setStyle('Fusion')
 appctxt = ApplicationContext()
 
 format_dict = {'ab1': 'abi',
@@ -314,6 +315,8 @@ class MainWindow(QtWidgets.QMainWindow):
             # Add buttons and connect to traces
             self.button_list.append(QtWidgets.QPushButton("View Trace"))
             self.trace_button_layout.addWidget(self.button_list[i])
+            self.button_list[i].setStyleSheet("QPushButton{font-size: 10px")
+            self.button_list[i].setFixedHeight(16)
             self.button_list[i].clicked.connect(partial(self.show_trace, seq_id=self.listWidget.item(i+1).text(),
                                                         seq_idx=i + 1))
 
@@ -326,21 +329,29 @@ class MainWindow(QtWidgets.QMainWindow):
         """add buttons to increment amino acid label number """
         minus_ten = QtWidgets.QPushButton("--", self.aa_inc_widget)
         minus_ten.clicked.connect(partial(self.adjust_xticks, value=-10))
+        minus_ten.setStyleSheet("QPushButton{font-size: 10px")
+        minus_ten.setFixedHeight(20)
         self.aa_inc_layout.addStretch()
         self.aa_inc_layout.addWidget(minus_ten)
 
         minus = QtWidgets.QPushButton("-", self.aa_inc_widget)
         minus.clicked.connect(partial(self.adjust_xticks, value=-1))
+        minus.setStyleSheet("QPushButton{font-size: 10px")
+        minus.setFixedHeight(20)
         self.aa_inc_layout.addStretch()
         self.aa_inc_layout.addWidget(minus)
 
         plus = QtWidgets.QPushButton("+", self.aa_inc_widget)
         plus.clicked.connect(partial(self.adjust_xticks, value=1))
+        plus.setStyleSheet("QPushButton{font-size: 10px")
+        plus.setFixedHeight(20)
         self.aa_inc_layout.addStretch()
         self.aa_inc_layout.addWidget(plus)
 
         plus_ten = QtWidgets.QPushButton("++", self.aa_inc_widget)
         plus_ten.clicked.connect(partial(self.adjust_xticks, value=10))
+        plus_ten.setStyleSheet("QPushButton{font-size: 10px")
+        plus_ten.setFixedHeight(20)
         self.aa_inc_layout.addStretch()
         self.aa_inc_layout.addWidget(plus_ten)
 
