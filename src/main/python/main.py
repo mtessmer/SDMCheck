@@ -185,11 +185,31 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setCentralWidget(self.centralwidget)
 
         # Initialize variables used by other methods
-        self.labels = []
         self.button_list = []
         self.top_axis_ticks = []
         self.top_axis_values = []
         self.alignment, self.seq_objs, self.ref_translation, self.ref_translate_aln, self.active_trace = [None] * 5
+
+    @property
+    def labels(self):
+        # Use only the last n letters of the file name that fit in the label widget layout
+        start_val = self.letter_per_label
+
+        labels = []
+        for i in range(0, self.listWidget.count()):
+            name = self.listWidget.item(i).text()
+            labels.append(self.get_label(name))
+
+        return labels
+
+    def get_label(self, name):
+        start_val = self.letter_per_label
+        pre_text = '...'
+        if len(name) < start_val + 4:
+            start_val = len(name)
+            pre_text = ''
+
+        return pre_text + name[-start_val:-4]
 
     def set_codon_table(self, species):
         self.codon_model.clear()
@@ -236,18 +256,11 @@ class MainWindow(QtWidgets.QMainWindow):
         :param name: str
             Name of sequence file
         """
-        # Use only the last n letters of the file name that fit in the label widget layout
-        name = os.path.basename(name)
-        start_val = self.letter_per_label
-        pre_text = '...'
-        if len(name) < start_val + 4:
-            start_val = len(name)
-            pre_text = ''
+
 
         # Create label widget for filename and add to  label widget layout
-        self.labels.append(pre_text + name[-start_val:-4])
         q_lab = QtWidgets.QLabel(self.centralwidget)
-        q_lab.setText(self.labels[-1])
+        q_lab.setText(self.get_label(name))
         q_lab.setFont(QtGui.QFont("Courier", 15))
         q_lab.setAlignment(QtCore.Qt.AlignRight)
         self.seq_label_layout.addWidget(q_lab)
@@ -363,7 +376,6 @@ class MainWindow(QtWidgets.QMainWindow):
                 item = self.aa_inc_layout.takeAt(i)
                 del item
 
-
         self.button_list = []
 
     def _reset(self):
@@ -371,7 +383,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.remove_alignment()
         self.listWidget.clear()
         self.listWidget.ref = None
-        self.labels = []
 
     def hide_trace(self):
         """Remove trace from graph"""
@@ -476,7 +487,7 @@ class MainWindow(QtWidgets.QMainWindow):
         le = []
 
         # TODO: fix this to keep track of full path
-        for i, label in enumerate(self.labels[2:]):
+        for i, label in enumerate(self.labels):
 
             j = popup_layout.count() + 1
             q_lab = QtWidgets.QLabel()
