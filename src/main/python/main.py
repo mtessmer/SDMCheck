@@ -3,7 +3,8 @@ from PyQt5 import QtWidgets, QtCore, QtGui
 import pyqtgraph as pg
 import numpy as np
 from scipy.interpolate import interp1d
-import sys, os, shutil, platform, csv, io
+import sys, os, shutil, platform, csv, io, tempfile
+from subprocess import Popen, PIPE, STDOUT
 from pathlib import Path
 from functools import partial
 from Bio import SeqIO, AlignIO, pairwise2
@@ -685,12 +686,15 @@ class FileList(QtWidgets.QListWidget):
                 tmp['PLOC2'] = [x[i] for i in tmp['PLOC2'][::-1]]
                 seq_objs[test_seq].annotations['abif_raw'] = tmp.copy()
 
-        # Write FASTA file with all sequences
-        SeqIO.write(seq_objs.values(), 'seqs.fasta', "fasta")
+        # Write temporary FASTA file with all sequences
+        temp_file = tempfile.NamedTemporaryFile('w+', delete=False)
+        SeqIO.write(seq_objs.values(), temp_file, "fasta")
+        temp_file.close()
 
         # Perform alignment
-        cline = ClustalOmegaCommandline(CLUSTAL_PATH, infile="seqs.fasta")
+        cline = ClustalOmegaCommandline(str(CLUSTAL_PATH), infile=temp_file.name)
         stdout, stderr = cline()
+        os.unlink(temp_file.name)
 
         # Read alignment using biopython
         alignment = io.StringIO(stdout)
