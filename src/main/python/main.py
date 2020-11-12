@@ -3,7 +3,7 @@ from PyQt5 import QtWidgets, QtCore, QtGui
 import pyqtgraph as pg
 import numpy as np
 from scipy.interpolate import interp1d
-import sys, os, shutil, platform, csv
+import sys, os, shutil, platform, csv, io
 from pathlib import Path
 from functools import partial
 from Bio import SeqIO, AlignIO, pairwise2
@@ -688,16 +688,13 @@ class FileList(QtWidgets.QListWidget):
         # Write FASTA file with all sequences
         SeqIO.write(seq_objs.values(), 'seqs.fasta', "fasta")
 
-        # Remove old alignment file if it exists
-        if os.path.exists('seqs.aln'):
-            os.remove('seqs.aln')
-
         # Perform alignment
-        cline = ClustalOmegaCommandline(CLUSTAL_PATH, infile="seqs.fasta", outfile="seqs.aln")
+        cline = ClustalOmegaCommandline(CLUSTAL_PATH, infile="seqs.fasta")
         stdout, stderr = cline()
 
-        # Read alignment file
-        alignment = AlignIO.read('seqs.aln', 'fasta')
+        # Read alignment using biopython
+        alignment = io.StringIO(stdout)
+        alignment = AlignIO.read(alignment, 'fasta')
 
         return alignment, seq_objs
 
