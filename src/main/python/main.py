@@ -25,10 +25,6 @@ clustal_paths = {'Windows': Path(appctxt.get_resource('clustal-omega-1.2.2-win64
 CLUSTAL_PATH = clustal_paths[platform.system()]
 CODON_PATH = Path(appctxt.get_resource("codon"))
 
-# TODO: Add support for other filetypes
-#       Implement Model|View design pattern
-#       Fix bug when updating/showing trace of sequences that have deleted nucleotides
-
 
 class MainWindow(QtWidgets.QMainWindow):
 
@@ -54,7 +50,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.window_height = 3 * self.pad + self.list_height + self.text_height + 100
         self.setWindowTitle("SDMCheck")
         self.resize(self.window_width, self.window_height)
-        self.list_start = 2 * self.pad + self.label_width #(self.window_width - (self.list_width + self.button_width + 2 * self.pad + self.table_width)) / 2
+        self.list_start = 2 * self.pad + self.label_width
 
         # Initialize file menu
         self.init_menu()
@@ -193,8 +189,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     @property
     def labels(self):
-        # Use only the last n letters of the file name that fit in the label widget layout
-        start_val = self.letter_per_label
+        """ Keeps a self updating list of labels in the listWidget """
 
         labels = []
         for i in range(0, self.listWidget.count()):
@@ -204,6 +199,8 @@ class MainWindow(QtWidgets.QMainWindow):
         return labels
 
     def get_label(self, name):
+        """ Get a truncated label of the list item. """
+
         start_val = self.letter_per_label
         pre_text = '...'
         if len(name) < start_val + 4:
@@ -223,9 +220,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.codon_table.resizeRowsToContents()
 
     def scroll_update(self):
-        """
-        Update trace graph to match sequences position of text box using sync'd scrollbar
-        """
+        """Update trace graph to match sequences position of text box using synchronized scrollbar"""
         r = self.scroll.value()
         step_size = self.scroll.pageStep()
         l1 = r * self.base_per_window / step_size
@@ -233,9 +228,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.graphWidget.setRange(xRange=[l1, l2], padding=0)
 
     def run_alignment(self):
-        """
-        Perform sequence alignment
-        """
+        """Perform sequence alignment"""
+
         # Warn user if no sequences are loaded
         if not self.listWidget.count():
             warn_user("Warning: There are no sequences to align.")
@@ -244,7 +238,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if not self.listWidget.ref:
             warn_user("Warning: You cannot perform alignment without first marking a reference sequence.")
 
-        # Remove current alignmnet if it exists
+        # Remove current alignment if it exists
         if self.button_list:
             self.remove_alignment()
 
@@ -267,9 +261,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.seq_label_layout.addWidget(q_lab)
 
     def translate_reference_sequence(self):
-        """
-        Translate reference sequence and align amino acid to first nucleotide of the corresponding codon
-        """
+        """Translate reference sequence and align amino acid to first nucleotide of the corresponding codon"""
+
         # Translate sequence with Biopython
         self.ref_translation = list(self.seq_objs.values())[0].translate()
 
@@ -297,6 +290,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.set_top_xticks()
 
     def adjust_xticks(self, value):
+        """Method to change amino acid sequence numbering"""
         self.top_axis_values += value
         self.set_top_xticks()
 
@@ -304,9 +298,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.top_ax.setTicks([list(zip(self.top_axis_ticks, self.top_axis_values))])
 
     def show_alignment(self):
-        """
-         Print MSA to text box. Add all Labels and "Show Trace" buttons.
-        """
+        """Print MSA to text box. Add all Labels and "Show Trace" buttons."""
+
         # Translate reference sequence
         self.translate_reference_sequence()
         self.add_aa_inc_buttons()
@@ -321,6 +314,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Add all other sequences in MSA. +1 offset to skip the reference sequence
         for i, elem in enumerate(self.alignment[1:]):
+
             # Add sequence to text box
             self.add_sequence_label(self.listWidget.item(i + 1).text())
             self.text.insertPlainText(str(elem.seq) + '\n')
@@ -358,12 +352,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.aa_inc_layout.addStretch()
         self.aa_inc_layout.addWidget(plus_ten)
 
-
     def remove_alignment(self):
         """Clear textbox, graph widget, labels and "View Trace" buttons"""
         self.text.clear()
         self.hide_trace()
-
 
         if self.seq_label_layout.count():
             # Remove "View Trace" and "Hide Trace" buttons
@@ -436,9 +428,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.active_trace.setStyleSheet("QPushButton { color: red;}")
 
     def init_menu(self):
-        """
-        Initialize file menue
-        """
+        """ Initialize file menu"""
+
         # Create menu bar
         menu_bar = self.menuBar()
 
@@ -454,6 +445,7 @@ class MainWindow(QtWidgets.QMainWindow):
         file_menu.addAction(quit_action)
 
     def set_save_dir(self, line_edit):
+        """Call popup to select save directory"""
         self.save_dir = QtWidgets.QFileDialog().getExistingDirectory()
         line_edit.setText(self.save_dir)
 
@@ -487,9 +479,10 @@ class MainWindow(QtWidgets.QMainWindow):
         popup_layout.addWidget(protein_input, 2, 1, 1, 2)
         le = []
 
-        # TODO: fix this to keep track of full path
+        # Loop through sequences
         for i, label in enumerate(self.labels):
 
+            # Create checkboxes and primer, and sequence labels for each sequence
             j = popup_layout.count() + 1
             q_lab = QtWidgets.QLabel()
             q_lab.setText(label)
@@ -504,15 +497,15 @@ class MainWindow(QtWidgets.QMainWindow):
             popup_layout.addWidget(chkbox, j, 1)
             popup_layout.addWidget(le[i])
 
+        # Add save button
         save_button = QtWidgets.QPushButton()
         save_button.setText("Save")
-        save_button.clicked.connect(partial(self._save, plasmid=plasmid_input,
-                                            protein=protein_input))
-
+        save_button.clicked.connect(partial(self._save, plasmid=plasmid_input, protein=protein_input))
         popup_layout.addWidget(save_button, popup_layout.count() + 1, 3)
         self.save_window.show()
 
     def check_label_event(self, checkbox_widget, label_widget, le):
+        """Add items to a save dictionary when they are checked"""
         if checkbox_widget.isChecked():
             source = self.listWidget.get_full_path(partial=label_widget.text())
             self.save_dict[label_widget.text()] = (source, le)
@@ -522,6 +515,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return None
 
     def _save(self, plasmid, protein):
+        """Save all items in save dictionary in their own new directory labeled"""
         plasmid = plasmid.text()
         protein = protein.text()
         protein = "_".join(protein.split(" "))
@@ -749,7 +743,9 @@ def read_file(file_name):
     file_format = format_dict[ext]
     return SeqIO.read(file_name, file_format)
 
+
 def prompt_user(text, title="Overwrite record?"):
+    """Create popup window alerting user if a record already exists"""
     msg = QtWidgets.QMessageBox()
     msg.setText(text)
     msg.setWindowTitle(title)
@@ -758,12 +754,11 @@ def prompt_user(text, title="Overwrite record?"):
 
     return returnValue == QtWidgets.QMessageBox.Yes
 
+
 def warn_user(text):
     """
-    Trigger popup with warning text
+    Trigger popup with arbitrary warning text
     :param text: str
-
-    :return:
     """
     msg = QtWidgets.QMessageBox()
     msg.setWindowTitle("Warning")
@@ -774,12 +769,10 @@ def warn_user(text):
 
 def main():
     """Main Qt Application"""
-    #app = QtWidgets.QApplication(sys.argv)
     main_window = MainWindow()
     main_window.show()
     sys.exit(appctxt.app.exec_())
 
 
 if __name__ == '__main__':
-
     main()
