@@ -28,6 +28,7 @@ CODON_PATH = Path(appctxt.get_resource("codon"))
 # TODO: Add support for other filetypes
 #       Implement Model|View design pattern
 #       Fix bug when updating/showing trace of sequences that have deleted nucleotides
+#       Fix horizontal scroll reset when textbox whitespace
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -636,7 +637,7 @@ class FileList(QtWidgets.QListWidget):
             return None
 
         # Remove reference marker if it is on a different file
-        if not self.ref:
+        if self.ref:
             self.item(0).setForeground(QtCore.Qt.black)
 
         # Store ref file name, color red and move to top
