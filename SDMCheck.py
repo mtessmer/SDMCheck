@@ -332,6 +332,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.trace_button_layout.addWidget(self.hide_trace_button)
         self.hide_trace_button.clicked.connect(self.hide_trace)
 
+        # Pad remaining lines with whitespace
+        for i in range(10):
+            self.text.insertPlainText(" " * len(elem.seq) + '\n')
+
     def add_aa_inc_buttons(self):
         """add buttons to increment amino acid label number """
         minus_ten = QtWidgets.QPushButton("--", self.aa_inc_widget)
