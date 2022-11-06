@@ -1,16 +1,11 @@
-from fbs_runtime.application_context.PyQt5 import ApplicationContext
 from PyQt5 import QtWidgets, QtCore, QtGui
 import pyqtgraph as pg
 import numpy as np
-from scipy.interpolate import interp1d
 import sys, os, shutil, platform, csv, io, tempfile
-from subprocess import Popen, PIPE, STDOUT
 from pathlib import Path
 from functools import partial
 from Bio import SeqIO, AlignIO, pairwise2
 from Bio.Align.Applications import ClustalOmegaCommandline
-
-appctxt = ApplicationContext()
 
 format_dict = {'ab1': 'abi',
                'fasta': 'fasta',
@@ -18,12 +13,12 @@ format_dict = {'ab1': 'abi',
 
 channels = ('DATA9', 'DATA10', 'DATA11', 'DATA12')
 
-clustal_paths = {'Windows': Path(appctxt.get_resource('clustal-omega-1.2.2-win64/clustalo.exe')),
-                 'Darwin': Path(appctxt.get_resource('clustal-omega-1.2.3-macosx')),
-                 'Linux': Path(appctxt.get_resource('clustalo-1.2.4-linux-x86_64'))}
+clustal_paths = {'Windows': Path('../resources/base/clustal-omega-1.2.2-win64/clustalo.exe'),
+                 'Darwin': Path('../resources/base/clustal-omega-1.2.3-macosx'),
+                 'Linux': Path('../resources/base/clustalo-1.2.4-linux-x86_64')}
 
 CLUSTAL_PATH = clustal_paths[platform.system()]
-CODON_PATH = Path(appctxt.get_resource("codon"))
+CODON_PATH = Path("../resources/base/codon")
 
 # TODO: Add support for other filetypes
 #       Implement Model|View design pattern
@@ -130,7 +125,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.seq_label_widget = QtWidgets.QWidget(self.centralwidget)
         self.seq_label_layout = QtWidgets.QVBoxLayout(self.seq_label_widget)
         self.seq_label_layout.setAlignment(QtCore.Qt.AlignTop)
-        self.seq_label_layout.setContentsMargins(0,0.5,0,0)
+        self.seq_label_layout.setContentsMargins(0, 1, 0, 0)
         self.seq_label_layout.setSpacing(0)
         self.seq_label_widget.setGeometry(QtCore.QRect(self.pad, 2 * self.pad + self.list_height + self.graph_y_diff,
                                                        self.label_width, self.text_height))
@@ -302,7 +297,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.set_top_xticks()
 
     def set_top_xticks(self):
-        self.top_ax.setTicks([list(zip(self.top_axis_ticks, self.top_axis_values))])
+        self.top_ax.setTicks([list(zip(self.top_axis_ticks, self.top_axis_values.astype(str)))])
 
     def show_alignment(self):
         """
@@ -422,8 +417,9 @@ class MainWindow(QtWidgets.QMainWindow):
         trace_idx = [0] + list(x_ticks) + [len(seq_obj.annotations['abif_raw'][channels[0]])]
         aln_idx = [i + 0.9 for i, ltr in enumerate(doc.findBlockByLineNumber(seq_idx + 1).text()) if ltr != '-']
         aln_idx = [aln_idx[0] - 1] + aln_idx + [aln_idx[-1] + 1]
-        f = interp1d(trace_idx, aln_idx)
-        new_x = f(np.arange(len(seq_obj.annotations['abif_raw'][channels[0]])))
+
+        xx = np.arange(len(seq_obj.annotations['abif_raw'][channels[0]]))
+        new_x = np.interp(xx, trace_idx, aln_idx)
 
         # Plot traces corresponding to bases
         for i, channel in enumerate(channels):
@@ -750,6 +746,7 @@ def read_file(file_name):
     file_format = format_dict[ext]
     return SeqIO.read(file_name, file_format)
 
+
 def prompt_user(text, title="Overwrite record?"):
     msg = QtWidgets.QMessageBox()
     msg.setText(text)
@@ -758,6 +755,7 @@ def prompt_user(text, title="Overwrite record?"):
     returnValue = msg.exec()
 
     return returnValue == QtWidgets.QMessageBox.Yes
+
 
 def warn_user(text):
     """
@@ -775,12 +773,12 @@ def warn_user(text):
 
 def main():
     """Main Qt Application"""
-    #app = QtWidgets.QApplication(sys.argv)
+    app = QtWidgets.QApplication(sys.argv)
     main_window = MainWindow()
     main_window.show()
-    sys.exit(appctxt.app.exec_())
+    sys.exit(app.exec_())
 
 
 if __name__ == '__main__':
-
     main()
+
