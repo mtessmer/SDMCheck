@@ -1,6 +1,0 @@
-{
-    "app_name": "SDMCheck",
-    "author": "Maxx Tessmer",
-    "main_module": "src/main/python/main.py",
-    "version": "0.0.0"
-}

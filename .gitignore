@@ -2,5 +2,8 @@ TestData
 venv
 .idea/
 __pycache__/
-target/*
-!target/SDMCheckSetup.exe
+SDMCheck.build/
+SDMCheck.dist/
+build_command
+SDMCheck.onefile-build/
+
