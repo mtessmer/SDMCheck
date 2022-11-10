@@ -131,10 +131,12 @@ class MainWindow(QtWidgets.QMainWindow):
                                                        self.label_width, self.text_height))
 
         # Create Graph widget for plotting traces
+        pg.setConfigOption('foreground', 'k')
         self.graphWidget = pg.PlotWidget(self.centralwidget)
-        self.graphWidget.setBackground('w')
+        self.graphWidget.setBackground('darkGray')
         self.graphWidget.showAxis('top')
         self.bottom_ax = self.graphWidget.getAxis('bottom')
+        self.bottom_ax.setLabel('Nucleotide')
         self.top_ax = self.graphWidget.getAxis('top')
         self.left_ax = self.graphWidget.getAxis('left')
         self.left_ax.setTicks([])
@@ -145,6 +147,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.graphWidget.setGeometry(QtCore.QRect(2 * self.pad + self.label_width, 2 * self.pad + self.list_height,
                                                   self.text_width + self.graph_x_diff,
                                                   self.text_height + 6))
+
+        self.legend = pg.LegendItem(offset=(1, 1), colCount=4)
+        self.legend.setParentItem(self.bottom_ax)
+        self.colors = 'gbyr'
+        for i, n in enumerate("GATC"):
+            item = pg.PlotDataItem(pen=(self.colors[i]))
+            self.legend.addItem(item, n)
 
         # Create text widget superimposed on graph widget for sequence alignments
         self.text = QtWidgets.QPlainTextEdit(self.centralwidget)
@@ -168,11 +177,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.text_button_widget = QtWidgets.QWidget(self.centralwidget)
         self.trace_button_layout = QtWidgets.QVBoxLayout(self.text_button_widget)
         self.trace_button_layout.setAlignment(QtCore.Qt.AlignTop)
-        self.trace_button_layout.setSpacing(0)
+        self.trace_button_layout.setSpacing(1)
         self.trace_button_layout.setContentsMargins(0, 0, 0, 0)
         self.text_button_widget.setGeometry(
             QtCore.QRect(self.pad * 3 + self.graph_x_diff + self.text_width + self.label_width,
-                         self.pad * 2 + self.graph_y_diff + self.list_height + 2 * self.char_height,
+                         self.pad * 2 + self.graph_y_diff + self.list_height + 2 * self.char_height + 5,
                          self.button_width, self.text_height))
 
         # Setup amino acid number increment widget
@@ -232,7 +241,7 @@ class MainWindow(QtWidgets.QMainWindow):
         bases = len(self.text.document().findBlockByLineNumber(0).text())
         n_windows = bases / self.base_per_window
         step = (r / self.scroll.maximum()) * (n_windows - 1)
-        delta = self.base_per_window + 0.12
+        delta = self.base_per_window + 0.045
         l1 = step * delta
         l2 = l1 + delta
         self.graphWidget.setRange(xRange=[l1, l2], padding=0)
@@ -317,13 +326,13 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Add reference sequence to text box
         self.add_sequence_label('DNA Reference Seq')
-        self.text.insertPlainText(str(self.alignment[0].seq) + '\n')
+        self.text.insertPlainText(str(self.alignment[0].seq))
 
         # Add all other sequences in MSA. +1 offset to skip the reference sequence
         for i, elem in enumerate(self.alignment[1:]):
             # Add sequence to text box
             self.add_sequence_label(self.listWidget.item(i + 1).text())
-            self.text.insertPlainText(str(elem.seq) + '\n')
+            self.text.insertPlainText('\n' + str(elem.seq))
 
             # Add buttons and connect to traces
             self.button_list.append(QtWidgets.QPushButton("View Trace"))
@@ -337,8 +346,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.hide_trace_button.clicked.connect(self.hide_trace)
 
         # Pad remaining lines with whitespace
-        for i in range(10):
-            self.text.insertPlainText(" " * len(elem.seq) + '\n')
+        for i in range(11 - self.text.document().blockCount()):
+            self.text.insertPlainText("\n" + " " * len(elem.seq))
 
     def add_aa_inc_buttons(self):
         """add buttons to increment amino acid label number """
@@ -395,8 +404,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if self.active_trace is not None:
             self.active_trace.setText("View Trace")
             self.active_trace.setStyleSheet("QPushButton { color: black;}")
-            self.bottom_ax.setTicks([list(zip(np.arange(0, len(self.alignment[0]), 10),
-                                              np.arange(0, len(self.alignment[0]), 10)))])
+            self.bottom_ax.setTicks(None)
 
     def show_trace(self, seq_id, seq_idx):
         """
@@ -431,7 +439,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Plot traces corresponding to bases
         for i, channel in enumerate(channels):
-            self.graphWidget.plot(new_x, seq_obj.annotations['abif_raw'][channel], name="GATC"[i], pen=(i, 4))
+            self.graphWidget.plot(new_x, seq_obj.annotations['abif_raw'][channel], name="GATC"[i], pen=self.colors[i])
 
         # Set x-axis labels to corresponding nucleotide
         self.bottom_ax.setTicks([list(zip(np.arange(len(x_tick_labels)) + 0.9, x_tick_labels))])
@@ -669,7 +677,7 @@ class FileList(QtWidgets.QListWidget):
                 if fname.endswith('.fasta'):
                     self.ref = self.item(i).text()
                     item.setForeground(QtCore.Qt.red)
-                    self.insertItem(0, item)
+                    self.insertItem(0, self.takeItem(i))
                     break
             else:
                 warn_user('No candidate reference sequence found. Please use a .fasta file for reference sequences')
