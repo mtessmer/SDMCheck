@@ -136,6 +136,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.graphWidget.showAxis('top')
         self.bottom_ax = self.graphWidget.getAxis('bottom')
         self.top_ax = self.graphWidget.getAxis('top')
+        self.left_ax = self.graphWidget.getAxis('left')
+        self.left_ax.setTicks([])
+        self.left_ax.setWidth(35)
+
         self.graphWidget.setRange(xRange=[0, self.base_per_window], padding=0)
         self.graphWidget.setMouseEnabled(x=False)
         self.graphWidget.setGeometry(QtCore.QRect(2 * self.pad + self.label_width, 2 * self.pad + self.list_height,
@@ -222,19 +226,19 @@ class MainWindow(QtWidgets.QMainWindow):
         self.codon_table.resizeRowsToContents()
 
     def scroll_update(self):
-        """
-        Update trace graph to match sequences position of text box using sync'd scrollbar
-        """
+        """Update trace graph to match sequences position of text box using sync'd scrollbar"""
         r = self.scroll.value()
-        step_size = self.scroll.pageStep()
-        l1 = r * self.base_per_window / step_size
-        l2 = l1 + self.base_per_window
+
+        bases = len(self.text.document().findBlockByLineNumber(0).text())
+        n_windows = bases / self.base_per_window
+        step = (r / self.scroll.maximum()) * (n_windows - 1)
+        delta = self.base_per_window + 0.12
+        l1 = step * delta
+        l2 = l1 + delta
         self.graphWidget.setRange(xRange=[l1, l2], padding=0)
 
     def run_alignment(self):
-        """
-        Perform sequence alignment
-        """
+        """Perform sequence alignment"""
         # Warn user if no sequences are loaded
         if not self.listWidget.count():
             warn_user("Warning: There are no sequences to align.")
@@ -430,7 +434,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Plot traces corresponding to bases
         for i, channel in enumerate(channels):
-            self.graphWidget.plot(new_x, seq_obj.annotations['abif_raw'][channel], name="GATC"[i], pen=(i,4))
+            self.graphWidget.plot(new_x, seq_obj.annotations['abif_raw'][channel], name="GATC"[i], pen=(i, 4))
 
         # Set x-axis labels to corresponding nucleotide
         self.bottom_ax.setTicks([list(zip(np.arange(len(x_tick_labels)) + 0.9, x_tick_labels))])
