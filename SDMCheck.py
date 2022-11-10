@@ -145,6 +145,9 @@ class MainWindow(QtWidgets.QMainWindow):
         # Create text widget superimposed on graph widget for sequence alignments
         self.text = QtWidgets.QPlainTextEdit(self.centralwidget)
         self.text.setFont(QtGui.QFont("Courier", 15))
+        color_palette = self.text.palette()
+        color_palette.setColor(QtGui.QPalette.Text, QtCore.Qt.black)
+        self.text.setPalette(color_palette)
         self.text.viewport().setAutoFillBackground(False)
         self.text.setFrameStyle(QtWidgets.QFrame.NoFrame)
         self.text.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
@@ -777,6 +780,7 @@ def warn_user(text):
 
 def main():
     """Main Qt Application"""
+    QtWidgets.QApplication.setStyle('Fusion')
     app = QtWidgets.QApplication(sys.argv)
     main_window = MainWindow()
     main_window.show()
