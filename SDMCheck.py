@@ -242,10 +242,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Warn user if no sequences are loaded
         if not self.listWidget.count():
             warn_user("Warning: There are no sequences to align.")
-
-        # Warn user if no reference sequence is selected
-        if not self.listWidget.ref:
-            warn_user("Warning: You cannot perform alignment without first marking a reference sequence.")
+            return None
 
         # Remove current alignmnet if it exists
         if self.button_list:
@@ -659,6 +656,27 @@ class FileList(QtWidgets.QListWidget):
             Returns multiple sequence alignment (MSA) and sequence records for each qualifying sequence in the alignment
         """
         # Read reference sequence information into dictionary
+        if self.ref is None:
+
+            # Warn user if no reference sequence is selected
+            warn_user("Warning: No reference sequence has been selected. SDMCheck will try to guess the reference "
+                      "sequence.")
+
+            for i in range(1, self.count()):
+                item = self.item(i)
+                fname = item.text()
+
+                if fname.endswith('.fasta'):
+                    self.ref = self.item(i).text()
+                    item.setForeground(QtCore.Qt.red)
+                    self.insertItem(0, item)
+                    break
+            else:
+                warn_user('No candidate reference sequence found. Please use a .fasta file for reference sequences')
+                return None
+
+
+
         seq_objs = {self.ref: read_file(self.ref)}
 
         # Temporarily store sequence of reference as string
