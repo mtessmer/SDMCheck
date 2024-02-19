@@ -21,9 +21,8 @@ CLUSTAL_PATH = clustal_paths[platform.system()]
 CODON_PATH = Path("resources/base/codon")
 
 # TODO: Add support for other filetypes
-#       Implement Model|View design pattern
 #       Fix bug when updating/showing trace of sequences that have deleted nucleotides
-#       Fix horizontal scroll reset when textbox whitespace
+#       Gray out sequences that are not related to the active trace
 
 
 class MainWindow(QtWidgets.QMainWindow):
